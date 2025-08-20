@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>NTU COOL 多開課程網頁（交錯順序版）</title>
+  <style>
+    :root {
+      --pink-bg:     #fff5f9;
+      --pink-border: #ffb6d2;
+      --pink-btn:    #ffc7db;
+      --pink-hover:  #ff9fbe;
+      --pink-title:  #d6336c;
+    }
+
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background: var(--pink-bg);
+      color: #333;
+      padding: 2rem;
+    }
+
+    h2 { color: var(--pink-title); }
+
+    textarea {
+      width: 100%;
+      height: 150px;
+      box-sizing: border-box;
+      border: 1px solid var(--pink-border);
+      border-radius: 4px;
+      background: #fff;
+    }
+
+    select, button, input[type="text"] {
+      margin-top: 1rem;
+      padding: 0.5rem;
+      border: 1px solid var(--pink-border);
+      border-radius: 4px;
+      background: #fff;
+    }
+
+    button {
+      background: var(--pink-btn);
+      color: #333;
+      cursor: pointer;
+    }
+    button:hover { background: var(--pink-hover); }
+
+    #customSuffixInput { display: none; width: calc(100% - 1rem); }
+
+    #catContainer {
+      margin-top: 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    #catContainer img {
+      max-width: 200px;
+      border-radius: 8px;
+      border: 1px solid var(--pink-border);
+    }
+  </style>
+</head>
+<body>
+  <h2>NTU COOL 多開課程網頁（交錯順序版）</h2>
+
+  <p>請貼上所有課程網址或學號（逗號或換行分隔）：</p>
+  <textarea id="urlList" placeholder="https://cool.ntu.edu.tw/courses/1234"></textarea>
+
+  <p>選擇要開啟的頁面：</p>
+  <select id="suffix">
+    <optgroup label="➤ 課程網址（以 /courses/ 開頭）">
+      <option value="">課程首頁</option>
+      <option value="/modules">課程內容</option>
+      <option value="/gradebook">成績</option>
+      <option value="/users">成員</option>
+      <option value="/assignments">作業</option>
+      <option value="/discussion_topics">討論</option>
+      <option value="/quizzes">測驗</option>
+      <option value="/settings">設定</option>
+      <option value="/settings/configurations#tab-details">設定‑詳細資訊</option>
+      <option value="/settings/configurations#tab-sections">設定‑班別</option>
+      <option value="custom">自行貼上後綴</option>
+    </optgroup>
+    <optgroup label="➤ 學號搜尋（只需學號或 email）">
+      <option value="search-users">搜尋成員（學號或信箱皆可）</option>
+    </optgroup>
+  </select>
+  <input type="text" id="customSuffixInput" placeholder="請輸入自訂後綴（例如 /modules）" />
+
+  <br />
+  <button id="openBtn">一鍵開啟所有連結</button>
+
+  <!-- 貓貓生成器 -->
+  <button id="catBtn">萌貓貓來兩張</button>
+  <div id="catContainer"></div>
+
+  <script>
+    const suffixSelect = document.getElementById('suffix');
+    const customInput  = document.getElementById('customSuffixInput');
+    const urlList      = document.getElementById('urlList');
+
+    // 交錯排序：把清單切成前半與後半，交錯排列：1, half+1, 2, half+2, ...
+    function interleaveByHalves(list) {
+      const n = list.length;
+      const half = Math.ceil(n / 2);
+      const first = list.slice(0, half);
+      const second = list.slice(half);
+      const out = [];
+      for (let i = 0; i < half; i++) {
+        if (i < first.length) out.push(first[i]);
+        if (i < second.length) out.push(second[i]);
+      }
+      return out;
+    }
+
+    suffixSelect.addEventListener('change', () => {
+      customInput.style.display = suffixSelect.value === 'custom' ? 'block' : 'none';
+    });
+
+    document.getElementById('openBtn').addEventListener('click', () => {
+      const raw = urlList.value;
+      let suffix = suffixSelect.value;
+
+      if (!raw.trim()) {
+        alert('請輸入至少一筆資料');
+        return;
+      }
+
+      const entries = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+
+      // 學號 / email 搜尋分支
+      if (suffix === 'search-users') {
+        const ordered = interleaveByHalves(entries);
+        ordered.forEach((id, i) => {
+          const cleanId = id.includes('@') ? id.split('@')[0] : id;
+          const url = `https://cool.ntu.edu.tw/accounts/1/users?search_term=${encodeURIComponent(cleanId)}&role_filter_id=&page=`;
+          setTimeout(() => { window.open(url, '_blank'); }, i * 500);
+        });
+        return;
+      }
+
+      // 自訂後綴
+      if (suffix === 'custom') {
+        let c = customInput.value.trim();
+        if (!c) { alert('請輸入自訂後綴'); return; }
+        if (!c.startsWith('/') && !c.startsWith('#')) c = '/' + c;
+        suffix = c;
+      }
+
+      // 僅保留有效的課程網址
+      const urls = entries.filter(u => u.includes('cool.ntu.edu.tw/courses/'));
+      if (!urls.length) { alert('請至少輸入一個有效的 COOL 課程連結'); return; }
+
+      const ordered = interleaveByHalves(urls);
+      ordered.forEach((u, i) => {
+        let urlObj;
+        try {
+          urlObj = new URL(u);
+        } catch {
+          urlObj = new URL('https://' + u.replace(/^\/+/, ''));
+        }
+
+        if (suffix.includes('#')) {
+          const [pathSuffix, frag] = suffix.split('#');
+          urlObj.pathname = urlObj.pathname.replace(/\/+$/, '') + (pathSuffix || '');
+          urlObj.hash = '#' + frag;
+        } else {
+          urlObj.pathname = urlObj.pathname.replace(/\/+$/, '') + suffix;
+        }
+
+        setTimeout(() => { window.open(urlObj.href, '_blank'); }, i * 500);
+      });
+    });
+
+    // 萌貓貓生成器
+    const catBtn = document.getElementById('catBtn');
+    const catContainer = document.getElementById('catContainer');
+
+    catBtn.addEventListener('click', async () => {
+      catContainer.textContent = '載入中…';
+      const apiUrl = new URL('https://api.thecatapi.com/v1/images/search');
+      apiUrl.searchParams.set('limit', '2');
+      apiUrl.searchParams.set('mime_types', 'jpg,png');
+
+      try {
+        const res = await fetch(apiUrl.href);
+        const data = await res.json();
+
+        catContainer.innerHTML = '';
+        data.slice(0, 2).forEach(item => {
+          const img = document.createElement('img');
+          img.src = item.url;
+          img.alt = 'cute cat';
+          catContainer.appendChild(img);
+        });
+      } catch (err) {
+        console.error(err);
+        catContainer.textContent = '載入失敗，請稍後再試';
+      }
+    });
+  </script>
+</body>
+</html>
